@@ -1,18 +1,44 @@
 import paho.mqtt.client as mqtt
-import time
-import random
+import mysql.connector
+
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="root",
+    database="home_control"
+)
+cursor = db.cursor()
+
+# Ensure one row exists
+cursor.execute("INSERT IGNORE INTO appliance_status (id, light_status, fan_status) VALUES (1, 'OFF', 'OFF')")
+db.commit()
+
+def on_message(client, userdata, msg):
+    status = msg.payload.decode()
+
+    if msg.topic == "home/light":
+        cursor.execute(
+            "UPDATE appliance_status SET light_status=%s WHERE id=1",
+            (status,)
+        )
+        print("Light turned", status)
+
+    elif msg.topic == "home/fan":
+        cursor.execute(
+            "UPDATE appliance_status SET fan_status=%s WHERE id=1",
+            (status,)
+        )
+        print("Fan turned", status)
+
+    db.commit()
 
 client = mqtt.Client()
-client.connect("broker.hivemq.com", 1883)
+client.connect("localhost", 1883, 60)
 
-while True:
-    light = random.choice(["ON", "OFF"])
-    fan = random.choice(["ON", "OFF"])
-    temp = round(random.uniform(20, 40), 2)
+client.subscribe("home/light")
+client.subscribe("home/fan")
 
-    client.publish("sensor/light", light)
-    client.publish("sensor/fan", fan)
-    client.publish("sensor/temp", temp)
+client.on_message = on_message
 
-    print(light, fan, temp)
-    time.sleep(5)
+print("Appliance status subscriber running...")
+client.loop_forever()
